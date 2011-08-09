@@ -5,9 +5,7 @@ geventirc
 Introduction
 ============
 
-`geventirc` is a simple irc client library using gevent.
-
-.. code-block:: python
+`geventirc` is a simple irc client library using gevent::
 
     from geventirc import Client
     
@@ -20,10 +18,9 @@ Introduction
 Handlers
 ========
 
-You react to messages from server using handlers, which can be any python
-callable.
+`handlers` react to messages from server, they can be any python
+callable::
 
-.. code-block:: python
 
     from gevenirc import Client
     from gevenirc import message
@@ -82,5 +79,4 @@ Join #gevent on freenode and talk to gwik.
 License
 =======
 
-copyleft Antonin Amand @gwik
-see LICENSE.txt
+MIT, see LICENSE.txt
