@@ -8,6 +8,7 @@ from gevent import socket
 
 from geventirc import message
 from geventirc import replycode
+from geventirc import handlers
 
 IRC_PORT = 194
 IRCS_PORT = 994
@@ -17,12 +18,15 @@ logger = logging.getLogger(__name__)
 
 class Client(object):
 
-    def __init__(self, hostname, nick, port=IRC_PORT, charset='utf-8'):
+    def __init__(self, hostname, nick, port=IRC_PORT,
+            local_hostname=None, server_name=None, real_name=None):
         self.hostname = hostname
         self.port = port
         self.nick = nick
         self._socket = None
-        self.charset = charset
+        self.real_name = real_name or nick
+        self.local_hostname = local_hostname or socket.gethostname()
+        self.server_name = server_name or 'gevent-irc'
         self._recv_queue = gevent.queue.Queue()
         self._send_queue = gevent.queue.Queue()
         self._group = gevent.pool.Group()
@@ -31,8 +35,11 @@ class Client(object):
 
     def add_handler(self, to_call, *commands):
         if not commands:
-            self._global_handlers.add(to_call)
-            return
+            if hasattr(to_call, 'commands'):
+                commands = to_call.commands
+            else:
+                self._global_handlers.add(to_call)
+                return
 
         for command in commands:
             command = str(command).upper()
@@ -89,7 +96,10 @@ class Client(object):
         client.send_message(message.Nick(self.nick))
         client.send_message(
                 message.User(
-                    'gwik', 'cafeine.local', 'cafeine', 'Antonin Amand'))
+                    self.nick,
+                    self.local_hostname,
+                    self.server_name,
+                    self.real_name))
         while True:
             data = self._recv_queue.get()
             msg = message.Message.decode(data)
@@ -112,77 +122,16 @@ class Client(object):
         self.stop()
 
 
-def print_handler(client, msg):
-    print msg.encode()[:-2]
-
-def join_handler(client, msg):
-    client.send_message(message.Join('#flood!'))
-    client.send_message(message.PrivMsg('#flood!', 'hello there'))
-
-def ping_handler(client, msg):
-    client.send_message(message.Pong())
-
-
-class NickInUseHandler(object):
-
-    def __call__(self, client, msg):
-        self.nick = msg.params[1] + '_'
-        client.send_message(message.Nick(self.nick))
-
-
-class NickServHandler(object):
-
-    def __init__(self, nick, password):
-        self.nick = nick
-        self.current_nick = None
-        self.password = password
-
-    def __call__(self, client, msg):
-        if msg.command == str(replycode.ERR_NICKNAMEINUSE) or \
-                msg.command == str(replycode.ERR_NICKCOLLISION):
-            nick = msg.params[1]
-            self.current_nick = nick + '_'
-            client.send_message(message.Nick(self.current_nick))
-            return
-        if msg.command == '001':
-            client.send_message(message.Nick(self.nick))
-            self.current_nick = self.nick
-            msg = message.PrivMsg('nickserv', 'identify ' + self.password)
-            client.send_message(msg)
-
-
-class Hello(object):
-
-    def __init__(self, channel, msg='hello', wait=1.0):
-        self.channel = channel
-        self.msg = 'hello'
-        self.wait = wait
-
-    def start(self, client, msg):
-        self.client = client
-        self._schedule()
-
-    def _schedule(self):
-        timer = gevent.get_hub().loop.timer(self.wait)
-        timer.start(self.__call__)
-
-    def run(self):
-        self.client.msg(self.channel, self.msg)
-    
-    def __call__(self):
-        gevent.spawn(self.run)
-        self._schedule()
-
-
 if __name__ == '__main__':
     nick = 'geventbot'
     client = Client('irc.freenode.net', nick, port=6667)
-    hello = Hello('#flood!')
-    client.add_handler(ping_handler, 'PING')
-    client.add_handler(join_handler, '001')
-    client.add_handler(hello.start, '001')
-    client.add_handler(print_handler)
-    client.add_handler(NickInUseHandler(), replycode.ERR_NICKNAMEINUSE)
+    client.add_handler(handlers.ping_handler, 'PING')
+    client.add_handler(handlers.JoinHandler('#flood!'))
+    # client.add_handler(hello.start, '001')
+    client.add_handler(handlers.ReplyWhenQuoted("I'm just a bot"))
+    client.add_handler(handlers.print_handler)
+    client.add_handler(handlers.nick_in_user_handler, replycode.ERR_NICKNAMEINUSE)
+    client.add_handler(handlers.ReplyToDirectMessage("I'm just a bot"))
     client.start()
     client.join()
 
