@@ -36,6 +36,23 @@ class Message(object):
         self.command = command
         self.params = params
 
+    @property
+    def prefix_parts(self):
+        """ return tuple(<servername/nick>, <user agent>, <host>)
+        """
+        server_name = None
+        user = None
+        host = None
+        if "!" in self.prefix:
+            server_name, userhost = self.prefix.split('!', 1)
+            if '@' in userhost:
+                user, host = userhost.split('@', 1)
+            else:
+                host = userhost
+        else:
+            server_name = self.prefix
+        return server_name, user, host
+
     def encode(self):
         buf = ''
         if self.prefix is not None:
