@@ -72,9 +72,9 @@ callable::
 Contact & Help
 ==============
 
-twitter: @gwik
-email: antonin.amand@gmail.com
-Join #gevent on freenode and talk to gwik.
+- twitter: @gwik
+- email: antonin.amand@gmail.com
+- Join #gevent on freenode and talk to gwik.
 
 License
 =======
