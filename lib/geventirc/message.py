@@ -43,10 +43,12 @@ class Message(object):
         server_name = None
         user = None
         host = None
-        if "!" in self.prefix:
-            server_name, userhost = self.prefix.split('!', 1)
-            if '@' in userhost:
-                user, host = userhost.split('@', 1)
+        pos = self.prefix.find('!')
+        if pos >= 0:
+            server_name, userhost = self.prefix[:pos], self.prefix[pos+1:]
+            pos = self.prefix.find('@')
+            if pos >= 0:
+                user, host = userhost[:pos], userhost[pos+1:]
             else:
                 host = userhost
         else:
