@@ -1,1 +1,2 @@
-# package
+from geventirc.irc import Client
+
