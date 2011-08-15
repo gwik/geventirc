@@ -1,8 +1,12 @@
-DELIM = chr(40)
+DELIM = chr(040)
 INVALID_CHARS = ["\r", "\n", "\0"]
 CR = "\r"
 NL = "\n"
 NUL = chr(0)
+
+
+class ProtocolViolationError(StandardError):
+    pass
 
 def is_valid_param(param):
     for invalid in INVALID_CHARS:
@@ -14,37 +18,43 @@ def irc_split(data):
     prefix = ''
     buf = data
     trailing = None
+    command = None
 
     if buf.startswith(':'):
-        prefix, buf = buf[1:].split(DELIM, 1)
-    command, buf = buf.split(DELIM, 1)
+        try:
+            prefix, buf = buf[1:].split(DELIM, 1)
+        except ValueError:
+            pass
     try:
-        buf, trailing = buf.split(' :', 1)
+        command, buf = buf.split(DELIM, 1)
+    except ValueError:
+        raise ProtocolViolationError('no command received: %r' % buf)
+    try:
+        buf, trailing = buf.split(DELIM + ':', 1)
     except ValueError:
         pass
-    params = buf.split(' ')
+    params = buf.split(DELIM)
     if trailing is not None:
         params.append(trailing)
     return prefix, command, params
 
 def irc_unsplit(prefix, command, params):
     buf = ''
-    if self.prefix is not None:
+    if prefix is not None:
         buf += prefix + DELIM
     buf += command + DELIM
     if params is None:
         pass
     elif isinstance(params, basestring):
-        assert not self.params.startswith(':'), 'params must not start with :'
-        assert is_valid_param(params), 'invalid param: ' + params
+        assert not params.startswith(':'), 'params must not start with :'
         buf += ":" + params
     else:
-        for param in self.params:
-            assert is_valid_param(param), 'invalid param: ' + params
-            if DELIM in param:
-                buf += ":"
-            buf += param + DELIM
-    buf += "\r\n"
+        if params:
+            rparams, trailing = params[:-1], params[-1]
+            if rparams:
+                buf += DELIM.join(rparams) + DELIM
+            if trailing:
+                buf += ":" + trailing
     return buf
 
 
@@ -81,7 +91,7 @@ class Message(object):
         return server_name, user, host
 
     def encode(self):
-        irc_unsplit(self.prefix, self.command, self.params)
+        return irc_unsplit(self.prefix, self.command, self.params) + "\r\n"
 
 
 class Command(Message):
@@ -220,25 +230,61 @@ def ctcp_dequote(string):
 
 class CTCPMessage(Message):
 
+    def __init__(self, command, params, ctcp_params, prefix=None):
+        super(CTCPMessage, self).__init__(command, params, prefix=prefix)
+        self.ctcp_params = ctcp_params
+
     @classmethod
     def decode(cls, data):
         prefix, command, params = irc_split(data)
-        params = map(lambda x: ctcp_dequote(low_level_dequote(x)), params)
-        return cls(command, params, prefix=None)
+        extended_messages = []
+        normal_messages = []
+        if params:
+            params = DELIM.join(params)
+            decoded = low_level_dequote(params)
+            messages = decoded.split(X_DELIM)
+            messages.reverse()
+
+            odd = False
+            extended_messages = []
+            normal_messages = []
+
+            while messages:
+                message = messages.pop()
+                if odd:
+                    if message:
+                        ctcp_decoded = ctcp_dequote(message)
+                        split = ctcp_decoded.split(DELIM, 1)
+                        tag = split[0]
+                        data = None
+                        if len(split) > 1:
+                            data = split[1]
+                        extended_messages.append((tag, data))
+                else:
+                    if message:
+                        normal_messages += filter(None, message.split(DELIM))
+                odd = not odd
+
+        return cls(command, normal_messages, extended_messages, prefix=prefix)
 
     def encode(self):
-        # XXX wrong what about normal params ?
-        ctcp_params = []
-        for tag, data in self.params:
+        ctcp_buf = ''
+        for tag, data in self.ctcp_params:
             if data:
-                if isinstance(data, basestring):
-                    data = " ".join(map(str, data))
-                m = tag + " " + data
+                if not isinstance(data, basestring):
+                    data = DELIM.join(map(str, data))
+                m = tag + DELIM + data
             else:
                 m = str(tag)
-            m = low_level_quote(m)
-            m = X_DELIM + ctcp_quote(m) + X_DELIM
-            ctcp_params.append(m)
+            ctcp_buf += X_DELIM + ctcp_quote(m) + X_DELIM
 
-        return irc_unsplit(self.prefix, self.command, ctcp_params)
+        return irc_unsplit(
+                self.prefix, self.command, self.params + 
+                [low_level_quote(ctcp_buf)]) + "\r\n"
 
+
+class Me(CTCPMessage):
+
+    def __init__(self, to, action, prefix=None):
+        super(Me, self).__init__(
+                'PRIVMSG', [to], [('ACTION', action)], prefix=prefix)

@@ -59,7 +59,7 @@ class ReplyWhenQuoted(object):
         self.reply = reply
 
     def __call__(self, client, msg):
-        channel, content = msg.params
+        channel, content = msg.params[0], " ".join(msg.params[1:])
         if client.nick in content:
             # check if this is a direct message
             if channel != client.nick:
@@ -74,7 +74,7 @@ class ReplyToDirectMessage(object):
         self.reply = reply
 
     def __call__(self, client, msg):
-        channel, content = msg.params
+        channel = msg.params[0]
         if client.nick == channel:
             nick, user_agent, host = msg.prefix_parts
             if nick is not None:

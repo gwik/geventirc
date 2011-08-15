@@ -89,7 +89,7 @@ class Client(object):
     def _send_loop(self):
         while True:
             command = self._send_queue.get()
-            print 'send: ' + command.encode()[:-2]
+            print 'send: %r' % command.encode()[:-2]
             self._socket.sendall(command.encode())
 
     def _process_loop(self):
@@ -102,7 +102,7 @@ class Client(object):
                     self.real_name))
         while True:
             data = self._recv_queue.get()
-            msg = message.Message.decode(data)
+            msg = message.CTCPMessage.decode(data)
             self._handle(msg)
 
     def stop(self):
@@ -123,6 +123,16 @@ class Client(object):
 
 
 if __name__ == '__main__':
+
+    class MeHandler(object):
+        commands = ['PRIVMSG']
+
+        def __call__(self, client, msg):
+            if client.nick == msg.params[0]:
+                nick, _, _ = msg.prefix_parts
+                client.send_message(
+                        message.Me(nick, "do nothing it's just a bot"))
+
     nick = 'geventbot'
     client = Client('irc.freenode.net', nick, port=6667)
     client.add_handler(handlers.ping_handler, 'PING')
@@ -132,6 +142,7 @@ if __name__ == '__main__':
     client.add_handler(handlers.print_handler)
     client.add_handler(handlers.nick_in_user_handler, replycode.ERR_NICKNAMEINUSE)
     client.add_handler(handlers.ReplyToDirectMessage("I'm just a bot"))
+    client.add_handler(MeHandler())
     client.start()
     client.join()
 
