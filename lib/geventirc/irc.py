@@ -89,7 +89,6 @@ class Client(object):
     def _send_loop(self):
         while True:
             command = self._send_queue.get()
-            print 'send: %r' % command.encode()[:-2]
             self._socket.sendall(command.encode())
 
     def _process_loop(self):
