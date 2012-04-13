@@ -93,8 +93,8 @@ class Client(object):
             self._socket.sendall(command.encode())
 
     def _process_loop(self):
-        client.send_message(message.Nick(self.nick))
-        client.send_message(
+        self.send_message(message.Nick(self.nick))
+        self.send_message(
                 message.User(
                     self.nick,
                     self.local_hostname,
